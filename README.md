@@ -6,7 +6,7 @@ Welcome to "Moroccan Food Industry", a project aimed at exploring Morocco's food
 ### Project Author
 Mohammed Said ANEZARY
 
-**LinkedIn Profile:** [Mohammed Said ANEZARY](https://www.linkedin.com/in/msanezary/)
+**LinkedIn Profile:** [Mohammed Said ANEZARY](https://www.linkedin.com/in/msanezary/)\\
 **Email:** [email](msanezary@gmail.com)
 
 ## Project Objective
@@ -26,6 +26,10 @@ This project seeks to leverage data to understand the dynamics of the Moroccan f
 - Python
 - Libraries: BeautifulSoup, pandas, numpy, requests, googlemaps, geopy, sklearn
 - APIs: Google Maps
+
+## Remarks:
+* Since this project relies on the HTML code structure of the Glovo Moroccan website, some modifications may be necessary for it to work properly in your country.
+* The googlemaps Places API can be obtained from [Developer google Places API](https://console.cloud.google.com/apis/library/places-backend.googleapis.com?hl=fr&project=prefab-phoenix-384223)
 
 ## Setup and Installation
 1. **Clone the repository:**
