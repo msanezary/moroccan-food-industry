@@ -1,103 +1,92 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
-Scraping module for the 'Tasting Data' project: Exploring Morocco's Food Industry
-and Making Some Recommendations
-"""
-
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 import pandas as pd
-import time
-
-def concat_list(list_of_lists, separator):
-    """Concatenates the strings in a list of lists with a separator."""
-    return [separator.join(items) for items in list_of_lists]
-
-def extract_text(html_list, separator):
-    """Extracts text from a list of BeautifulSoup tag objects and concatenates them with a separator."""
-    return concat_list([tag.text.split() for tag in html_list], separator)
-
-def extract_data(soup):
-    """Extracts data from a restaurant's webpage and returns it as a pandas DataFrame."""
-    local_df = pd.DataFrame(columns=['Restaurant', 'Link to glovo', 'Dish category', 'Dish name', 'Ingredients', 'Price', 'Rating glovo'])
-    dish_categories = soup.find_all('div', class_='store__body__dynamic-content')
-    ratings = soup.find_all('span', class_='store-rating__label')
-    store_name = soup.find_all('h1', class_='store-info__title')
-    
-    # Process text extraction
-    rating = extract_text(ratings, ' ')
-    store = [extract_text(store_name, ' ')[0]] if store_name else [None]
-
-    # Iterate through each category and dish
-    for category in dish_categories:
-        dishes = category.find_all('div', class_='list')
-        for dish in dishes:
-            dish_type = dish.find('p', class_='list__title')
-            products = dish.find_all('div', class_='product-row__name')
-            ingredients = extract_ingredients(dish)
-            prices = extract_prices(dish)
-            dish_type_text = extract_text([dish_type], ' ') if dish_type else None
-
-            # Prepare data for DataFrame
-            data = {
-                'Restaurant': store * len(products),
-                'Link to glovo': ['link_placeholder'] * len(products),
-                'Dish category': dish_type_text * len(products),
-                'Dish name': extract_text(products, ' '),
-                'Ingredients': ingredients,
-                'Price': prices,
-                'Rating glovo': rating * len(products)
-            }
-            local_df = pd.concat([local_df, pd.DataFrame(data)], ignore_index=True)
-            
-    return local_df
-
-def extract_ingredients(dish):
-    """Extracts ingredients from a dish listing."""
-    ingredients = []
-    for product in dish.find_all('div', class_='product-row__info'):
-        ingredient = product.find_all('span', class_='product-row__info__description')
-        ingredients.append(extract_text(ingredient, ' ')[0] if ingredient else None)
-    return ingredients
-
-def extract_prices(dish):
-    """Extracts prices from a dish listing."""
-    prices = dish.find_all('span', class_='product-price__effective product-price__effective--new-card')
-    return extract_text(prices, ' ')
+from helpers import extract_data
+import time 
+from geopy.geocoders import Nominatim
+import googlemaps
+from tqdm import tqdm
 
 def scrape_glovo(city):
-    """Scrapes Glovo restaurant data for a specified city."""
+    """
+    Scrapes Glovo restaurant data for a specified city.
+
+    Parameters:
+    city: The city to scrape data for.
+
+    Returns:
+    A DataFrame containing all the scraped data from Glovo.
+    """
     session = requests.Session()
-    base_url = f'https://glovoapp.com/ma/fr/{city}/restaurants_1/'
-    content = session.get(base_url).text
+    url = f'https://glovoapp.com/ma/fr/{city}/restaurants_1/'
+    content = session.get(url).text
     soup = BeautifulSoup(content, 'lxml')
 
-    # Find number of pages
     pagination = soup.find('div', class_='category-page__pagination-wrapper')
-    if pagination:
-        nb_pages = int(pagination.find('span', class_='current-page-text').text.split()[-1])
+    nb_pages = int(pagination.find('span', class_='current-page-text').text.split()[-1]) if pagination else 0
 
-        # Collect links from all pages
-        restaurant_links = set()
-        for page in range(1, nb_pages + 1):
-            page_url = f'{base_url}?page={page}'
-            response = session.get(page_url)
-            page_soup = BeautifulSoup(response.content, 'lxml')
-            restaurants = page_soup.find_all('a', class_='collection-item hover-effect full-width--mobile')
-            for restaurant in restaurants:
-                restaurant_links.add(restaurant['href'])
+    restaurant_links = set()
+    for page in tqdm(range(1, nb_pages + 1), desc="Scraping pages"):
+        page_url = f'{url}?page={page}'
+        page_soup = BeautifulSoup(session.get(page_url).text, 'lxml')
+        for link in page_soup.find_all('a', class_='store-card'):
+            restaurant_links.add(link['href'])
 
-        # Scrape data from each restaurant link
-        full_data = pd.DataFrame()
-        for link in restaurant_links:
-            restaurant_url = 'https://glovoapp.com' + link
-            restaurant_content = session.get(restaurant_url).text
-            restaurant_soup = BeautifulSoup(restaurant_content, 'lxml')
-            restaurant_data = extract_data(restaurant_soup)
-            full_data = pd.concat([full_data, restaurant_data], ignore_index=True)
+    df_glovo = pd.DataFrame()
+    for link in tqdm(restaurant_links, desc="Processing restaurants"):
+        restaurant_url = 'https://glovoapp.com' + link
+        restaurant_soup = BeautifulSoup(session.get(restaurant_url).text, 'lxml')
+        df_glovo = pd.concat([df_glovo, extract_data(restaurant_soup)], ignore_index=True)
 
-        return full_data
-    else:
-        return pd.DataFrame()  # Return an empty DataFrame if no pagination found
+    return df_glovo
+
+def extract_googleMaps(df, city, api_key):
+    """
+    Extracts Google Maps data for each restaurant in the DataFrame.
+
+    Parameters:
+    df: DataFrame containing restaurant data.
+    city: City name to append to restaurant names for Google Maps searching.
+    api_key: Google Maps API key.
+
+    Returns:
+    DataFrame with added Google Maps data including latitude, longitude, and ratings.
+    """
+    gmaps = googlemaps.Client(key=api_key)
+    restaurant_info = pd.DataFrame()
+    for restaurant in tqdm(df['Restaurant'].unique(), desc="Fetching Google Maps data"):
+        place_name = f"{restaurant} {city}"
+        place_result = gmaps.places(place_name)
+        if place_result['results']:
+            result = place_result['results'][0]
+            data = {
+                'Restaurant': [restaurant],
+                'Address': [result['formatted_address']],
+                'Latitude': [result['geometry']['location']['lat']],
+                'Longitude': [result['geometry']['location']['lng']],
+                'Rating google': [result.get('rating', None)],
+                'Number of reviews': [result.get('user_ratings_total', None)],
+                'City': [city.upper()]
+            }
+            restaurant_info = pd.concat([restaurant_info, pd.DataFrame(data)], ignore_index=True)
+    return restaurant_info
+
+def extractDistricts(df):
+    """
+    Adds district information to each restaurant using geopy.
+
+    Parameters:
+    df: DataFrame containing restaurant data with latitude and longitude.
+
+    Returns:
+    DataFrame with district information added.
+    """
+    geolocator = Nominatim(user_agent="my_app")
+    tqdm.pandas(desc="Extracting Districts")  # Initialize tqdm for pandas apply
+    
+    # Use progress_apply instead of apply to integrate tqdm for visual progress
+    df['District'] = df.progress_apply(lambda row: geolocator.reverse((row['Latitude'], row['Longitude'])).raw.get('address', {}).get('city_district', None), axis=1)
+    return df
