@@ -93,17 +93,21 @@ def clean_price(price):
     except ValueError:
         return np.nan
 
+
 def clean_percentage(rating):
     """
-    Converts the rating from a percentage string to an integer, removing the '%' sign.
+    Converts the rating from a percentage string to a float, removing the '%' sign,
+    and dividing by 100 to convert it to a decimal.
 
     Parameters:
     rating : A string representing the rating.
 
     Returns:
-    The rating as an integer or NaN if conversion fails.
+    The rating as a float or NaN if conversion fails.
     """
     try:
-        return int(rating.replace('%', '')) if '%' in rating else int(rating)
-    except ValueError:
+        if isinstance(rating, str) and '%' in rating:
+            return float(rating.replace('%', '')) / 100
+        return float(rating)
+    except (ValueError, TypeError):
         return np.nan

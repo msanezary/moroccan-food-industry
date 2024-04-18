@@ -10,9 +10,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from helpers import clean_price, clean_percentage
 
+
 def preprocess_data(final_data):
     """
-    Cleans and preprocesses the given DataFrame by converting currency, handling missing data, and creating a composite rating.
+    Cleans and preprocesses the given DataFrame by converting currency, handling missing data, 
+    and creating a composite rating.
 
     Parameters:
     final_data (DataFrame): The dataset containing restaurant information.
@@ -20,39 +22,55 @@ def preprocess_data(final_data):
     Returns:
     DataFrame: The preprocessed data.
     """
-    try:
-        # Clean price data
-        final_data = final_data[final_data['Price'].str.contains('MAD')]
-        final_data['Price'] = final_data['Price'].apply(clean_price)
-        final_data['Price'] = final_data['Price'].astype(float)
+    print("Initial data count:", len(final_data))
 
-        # Clean ratings data
-        final_data = final_data.replace('--', np.nan)
-        final_data['Rating glovo'] = final_data['Rating glovo'].apply(clean_percentage)
+    # Clean price data: only keep rows with 'MAD' in 'Price'
+    final_data['Price'] = final_data['Price'].apply(clean_price)
+    final_data = final_data.dropna(subset=['Price'])
+    print("After MAD filter and price conversion:", len(final_data))
 
-        # Create a composite rating
-        df_rating = pd.DataFrame(columns=['Meal name', 'Rating'])
-        for i in range(len(final_data)):
-            glovo_rating = final_data.loc[i]['Rating glovo']
-            google_rating = final_data.loc[i]['Rating google']
-            if np.isnan(glovo_rating):
-                rating = google_rating
-            elif np.isnan(google_rating):
-                rating = glovo_rating / 20
-            else:
-                rating = (glovo_rating / 20 + google_rating) / 2
-            df_rating = pd.concat([df_rating, pd.DataFrame({'Meal name': [final_data.loc[i]['Meal name']], 'Rating': [rating]})], ignore_index=True)
-
-        final_data = pd.merge(final_data, df_rating, on='Meal name')
-        final_data = final_data.drop(columns=['Rating glovo', 'Rating google'])
-        final_data = final_data.drop_duplicates(subset=['Restaurant', 'Meal name'], keep='last')
-        final_data.dropna(axis='index', subset=['Latitude', 'Longitude'], inplace=True)
-        final_data = final_data.reset_index(drop=True)
-
+    if final_data.empty:
         return final_data
-    except Exception as e:
-        print(f"Error in preprocessing data: {e}")
-        return pd.DataFrame()
+
+    # Replace '--' with NaN in the entire DataFrame
+    final_data = final_data.replace('--', np.nan)
+
+    # Clean ratings data: Correct column name to 'Rating glovo'
+    final_data['Rating glovo'] = final_data['Rating glovo'].apply(clean_percentage)
+
+    # Create a composite rating
+    df_rating = pd.DataFrame(columns=['Meal name', 'Rating'])
+    for i in range(len(final_data)):
+        glovo_rating = final_data.iloc[i]['Rating glovo']
+        google_rating = final_data.iloc[i].get('Rating google', np.nan)
+        if np.isnan(glovo_rating):
+            rating = google_rating
+        elif np.isnan(google_rating):
+            rating = glovo_rating
+        else:
+            rating = (glovo_rating + google_rating) / 2
+        df_rating = pd.concat([df_rating, pd.DataFrame({'Meal name': [final_data.iloc[i]['Meal name']], 'Rating': [rating]})], ignore_index=True)
+    
+    print("Ratings calculated:", len(df_rating))
+
+    final_data = pd.merge(final_data, df_rating, on='Meal name', how='left')
+    print("After merging with ratings:", len(final_data))
+
+    # Drop columns 'Rating glovo', 'Rating google'
+    final_data = final_data.drop(columns=['Rating glovo', 'Rating google'], errors='ignore')
+
+    # Remove duplicate entries based on 'Restaurant' and 'Meal name'
+    final_data = final_data.drop_duplicates(subset=['Restaurant', 'Meal name'], keep='last')
+    print("After dropping duplicates:", len(final_data))
+
+    # Drop rows missing 'Latitude' or 'Longitude'
+    final_data.dropna(axis='index', subset=['Latitude', 'Longitude'], inplace=True)
+    print("After dropping rows with missing coordinates:", len(final_data))
+
+    final_data = final_data.reset_index(drop=True)
+    
+    return final_data
+
 
 def classify_meals(final_data, categories_file_path):
     """

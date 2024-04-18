@@ -18,12 +18,17 @@ class TestScraping(unittest.TestCase):
         df = scrape_glovo('test_city')
         self.assertTrue(isinstance(df, pd.DataFrame))
 
-    @patch('scraping.googlemaps.Client.places')
-    def test_extract_googleMaps(self, mock_places):
+    @patch('scraping.googlemaps.Client')
+    def test_extract_googleMaps(self, mock_client):
+        # Setup the mock client and its return values
+        mock_places = mock_client.return_value.places
         mock_places.return_value = {'results': [{'formatted_address': '123 Test St', 'geometry': {'location': {'lat': 10, 'lng': 20}}, 'rating': 4.5, 'user_ratings_total': 50}]}
+
         df = pd.DataFrame({'Restaurant': ['Test Restaurant'], 'Latitude': [10], 'Longitude': [20]})
         df = extract_googleMaps(df, 'Test City', 'fake_api_key')
-        self.assertIn('Rating google', df.columns)
+
+        self.assertIsNotNone(df)
+        self.assertEqual(df.iloc[0]['Address'], '123 Test St')
 
 if __name__ == '__main__':
     unittest.main()
