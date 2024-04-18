@@ -62,7 +62,7 @@ Contributions are welcome! Please feel free to fork this repository, make your c
 This project is released under the MIT License. For more details, see the [LICENSE](LICENSE) file included with this repository.
 
 ## Data Analysis
-For a detailed exploration of the data and insights, see our [Data Analysis Notebook](notebook\Tasting data-Morocco.ipynb).
+For a detailed exploration of the data and insights, see our [Data Analysis Notebook](notebook/Tasting data-Morocco.ipynb).
 
 The notebook includes detailed data cleaning, exploratory data analysis, visualizations of key trends, and the application of machine learning models for predictions. It provides insights into the dining preferences and trends observed across various districts in Morocco.
 
