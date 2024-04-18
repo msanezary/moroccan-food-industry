@@ -1,74 +1,81 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
-from sklearn.metrics import mean_squared_error
-import sys
+import random
 
-def load_data(filepath):
+def simulate_user_ratings(final_data):
     """
-    Loads data from a CSV file into a pandas DataFrame.
+    Simulates user ratings for meals based on the available meal data.
     
     Parameters:
-    filepath (str): The path to the CSV file.
+    final_data (DataFrame): The dataset containing restaurant information with meals.
     
     Returns:
-    DataFrame: The loaded data.
+    DataFrame: User-item interaction matrix.
     """
-    try:
-        return pd.read_csv(filepath)
-    except Exception as e:
-        print(f"Error loading data from {filepath}: {e}")
-        sys.exit(1)
+    meal_ids = final_data['Meal name'].unique().tolist()
+    user_ratings = {}
 
-def generate_user_item_matrix(df, user_col, item_col, rating_col, threshold=None):
+    for user_id in range(1, 1001):  # Simulate ratings for 1000 users
+        ratings = {meal: np.nan for meal in meal_ids}  # Start with all NaN ratings
+        num_ratings = random.randint(50, min(len(meal_ids), 150))  # Number of meals each user will rate
+        rated_meals = random.sample(meal_ids, num_ratings)
+
+        for meal in rated_meals:
+            ratings[meal] = random.uniform(0, 5)  # Assign a random rating between 0 and 5
+
+        user_ratings[user_id] = ratings
+
+    # Convert to DataFrame
+    ratings_df = pd.DataFrame.from_dict(user_ratings, orient='index')
+    ratings_df.index.name = 'User ID'
+    return ratings_df
+
+def normalize(pred_ratings):
     """
-    Creates an interaction matrix from a DataFrame.
+    Normalizes the prediction ratings.
+    """
+    return (pred_ratings - pred_ratings.min()) / (pred_ratings.max() - pred_ratings.min())
 
+def generate_prediction_df(user_item_matrix, n_factors=10):
+    """
+    Generates predicted ratings using matrix factorization (SVD).
+    
     Parameters:
-    df (DataFrame): The dataset containing the user-item interactions.
-    user_col (str): Column name for user IDs.
-    item_col (str): Column name for item IDs.
-    rating_col (str): Column name for ratings.
-    threshold (int, optional): Threshold value to binarize the ratings.
-
-    Returns:
-    DataFrame: The interaction matrix.
-    """
-    try:
-        interactions = df.groupby([user_col, item_col])[rating_col].sum().unstack().reset_index().fillna(0).set_index(user_col)
-        if threshold is not None:
-            interactions = interactions.applymap(lambda x: 1 if x > threshold else 0)
-        return interactions
-    except Exception as e:
-        print(f"Error creating interaction matrix: {e}")
-        return pd.DataFrame()
-
-def generate_prediction_df(interaction_matrix, n_factors=100):
-    """
-    Performs Singular Value Decomposition on the interaction matrix.
-
-    Parameters:
-    interaction_matrix (DataFrame): The user-item interaction matrix.
+    user_item_matrix (DataFrame): User-item interaction matrix.
     n_factors (int): Number of singular values and vectors to compute.
-
+    
     Returns:
-    np.array: The matrix approximated from the SVD operation.
+    DataFrame: Predicted ratings DataFrame.
     """
-    try:
-        matrix = csr_matrix(interaction_matrix.values)
-        u, s, vt = svds(matrix, k=n_factors)
-        s_diag_matrix = np.diag(s)
-        X_pred = np.dot(np.dot(u, s_diag_matrix), vt)
-        mse = mean_squared_error(interaction_matrix.values, X_pred)
-        print(f'Mean Squared Error of the recommendation system: {mse}')
-        return X_pred
-    except Exception as e:
-        print(f"Error performing SVD or calculating MSE: {e}")
-        return np.array([])
+    mat = csr_matrix(user_item_matrix.fillna(0).values)  # Fill NA with 0 and convert to CSR matrix
 
-if __name__ == "__main__":
-    filepath = sys.argv[1] if len(sys.argv) > 1 else 'path_to_ratings_data.csv'
-    data = load_data(filepath)
-    user_item_matrix = generate_user_item_matrix(data, 'user_id', 'item_id', 'rating')
-    prediction_results = generate_prediction_df(user_item_matrix, 100)
+    if not 1 <= n_factors < min(mat.shape):
+        raise ValueError("Must be 1 <= n_factors < min(mat.shape)")
+
+    u, s, v = svds(mat, k=n_factors)
+    s_diag_matrix = np.diag(s)
+    pred_ratings = np.dot(np.dot(u, s_diag_matrix), v)
+    pred_ratings = normalize(pred_ratings)
+
+    pred_df = pd.DataFrame(
+        pred_ratings,
+        index=user_item_matrix.index,
+        columns=user_item_matrix.columns
+    )
+    return pred_df.transpose()
+
+def recommend_meals(final_data):
+    """
+    Generates a complete recommendation for all meals based on simulated user ratings and matrix factorization.
+    
+    Parameters:
+    final_data (DataFrame): The processed dataset containing meal and restaurant data.
+    
+    Returns:
+    DataFrame: DataFrame containing predictions for each user.
+    """
+    user_item_matrix = simulate_user_ratings(final_data)
+    predictions = generate_prediction_df(user_item_matrix)
+    return predictions

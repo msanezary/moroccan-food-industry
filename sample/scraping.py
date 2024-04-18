@@ -88,5 +88,5 @@ def extractDistricts(df):
     tqdm.pandas(desc="Extracting Districts")  # Initialize tqdm for pandas apply
     
     # Use progress_apply instead of apply to integrate tqdm for visual progress
-    df['District'] = df.progress_apply(lambda row: geolocator.reverse((row['Latitude'], row['Longitude'])).raw.get('address', {}).get('city_district', None), axis=1)
+    df['District'] = df.progress_apply(lambda row: geolocator.reverse((row['Latitude'], row['Longitude'])).raw.get('address', {}).get('city_district', None), axis=1) ##Sometimes, city_district can be called municipality, district... So you should check the address list before
     return df

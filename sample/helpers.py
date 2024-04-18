@@ -44,28 +44,28 @@ def extract_data(soup):
     """
     try:
         local_df = pd.DataFrame(columns=['Restaurant', 'Link to Glovo', 'Meal category', 'Meal name', 'Ingredients', 'Price', 'Rating Glovo'])
-        dish_categories = soup.find_all('div', class_='store__body__dynamic-content')
+        meal_categories = soup.find_all('div', class_='store__body__dynamic-content')
         ratings = soup.find_all('span', class_='store-rating__label')
         store_names = soup.find_all('h1', class_='store-info__title')
 
         rating = extract(ratings, ' ')
         store = [extract(store_names, ' ')[0]] if store_names else [None]
 
-        for dish_category in dish_categories:
-            dishes = dish_category.find_all('div', class_='list')
-            for dish in dishes:
-                dish_type = dish.find('p', class_='list__title')
-                products = dish.find_all('div', class_='product-row__name')
+        for meal_category in meal_categories:
+            meals = meal_category.find_all('div', class_='list')
+            for meal in meals:
+                meal_type = meal.find('p', class_='list__title')
+                products = meal.find_all('div', class_='product-row__name')
                 ingredients = [extract([ingredient], ' ')[0] if ingredient else np.nan 
-                               for ingredient in dish.find_all('div', class_='product-row__info')]
-                prices = extract(dish.find_all('span', class_='product-price__effective product-price__effective--new-card'), ' ')
-                dish_type_text = extract([dish_type], ' ') if dish_type else [None]
+                               for ingredient in meal.find_all('div', class_='product-row__info')]
+                prices = extract(meal.find_all('span', class_='product-price__effective product-price__effective--new-card'), ' ')
+                meal_type_text = extract([meal_type], ' ') if meal_type else [None]
 
                 data = {
                     'Restaurant': store * len(products),
                     'Link to Glovo': ['link_placeholder'] * len(products),
-                    'Dish category': dish_type_text * len(products),
-                    'Dish name': extract(products, ' '),
+                    'Meal category': meal_type_text * len(products),
+                    'Meal name': extract(products, ' '),
                     'Ingredients': ingredients,
                     'Price': prices,
                     'Rating Glovo': rating * len(products)
@@ -87,7 +87,9 @@ def clean_price(price):
     The price as a float or NaN if conversion fails.
     """
     try:
-        return '{:.2f}'.format(float(price.replace(' ','').split('MAD')[0].replace(',','.')))
+        # Remove spaces, split by 'MAD', replace comma with dot, and convert to float
+        numeric_price = float(price.replace(' ', '').split('MAD')[0].replace(',', '.'))
+        return numeric_price
     except ValueError:
         return np.nan
 
